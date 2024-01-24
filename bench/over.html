@@ -1,0 +1,113 @@
+<b>Comparison Report - main..gabritto/d2-detect</b>
+<table border="0" cellpadding="0" cellspacing="0" >
+<thead>
+<tr>
+<th align=left><sub>Metric</sub></th>
+<th align=right><sub>main</sub></th>
+<th align=right><sub>gabritto/d2-detect</sub></th>
+<th align=right><sub>Delta</sub></th>
+<th align=right><sub>Best</sub></th>
+<th align=right><sub>Worst</sub></th>
+<th align=right><sub>p-value</sub></th>
+</tr>
+</thead>
+<tr class="group"><th align=left colspan="7"><sub>overloadperf - node (v20.11.0, x64)</sub></th></tr>
+<tbody>
+<tr class="measurement memory scenario0 host0">
+<td align=left><sub>Memory used</sub></td>
+<td align=right><sub>89,694k (± 0.00%)</sub></td>
+<td align=right><sub>88,985k (± 0.00%)</sub></td>
+<td align=right><sub>-709k (- 0.79%)</sub></td>
+<td align=right><sub>88,985k</sub></td>
+<td align=right><sub>88,985k</sub></td>
+<td align=right><sub>p=0.000 n=10</sub></td>
+</tr>
+<tr class="measurement parse-time scenario0 host0">
+<td align=left><sub>Parse Time</sub></td>
+<td align=right><sub>0.93s (± 0.24%)</sub></td>
+<td align=right><sub>0.91s (± 0.37%)</sub></td>
+<td align=right><sub>-0.02s (- 1.72%)</sub></td>
+<td align=right><sub>0.91s</sub></td>
+<td align=right><sub>0.92s</sub></td>
+<td align=right><sub>p=0.000 n=10</sub></td>
+</tr>
+<tr class="measurement bind-time scenario0 host0">
+<td align=left><sub>Bind Time</sub></td>
+<td align=right><sub>0.41s (± 0.54%)</sub></td>
+<td align=right><sub>0.42s (± 0.87%)</sub></td>
+<td align=right><sub>+0.01s (+ 1.71%)</sub></td>
+<td align=right><sub>0.41s</sub></td>
+<td align=right><sub>0.42s</sub></td>
+<td align=right><sub>p=0.004 n=10</sub></td>
+</tr>
+<tr class="measurement check-time scenario0 host0">
+<td align=left><sub>Check Time</sub></td>
+<td align=right><sub>0.35s (± 1.03%)</sub></td>
+<td align=right><sub>0.36s (± 0.94%)</sub></td>
+<td align=right><sub>+0.01s (+ 2.54%)</sub></td>
+<td align=right><sub>0.36s</sub></td>
+<td align=right><sub>0.37s</sub></td>
+<td align=right><sub>p=0.003 n=10</sub></td>
+</tr>
+<tr class="measurement emit-time scenario0 host0">
+<td align=left><sub>Emit Time</sub></td>
+<td align=right><sub>0.00s (± 0.00%)</sub></td>
+<td align=right><sub>0.00s (± 0.00%)</sub></td>
+<td align=right><sub>~</sub></td>
+<td align=right><sub>0.00s</sub></td>
+<td align=right><sub>0.00s</sub></td>
+<td align=right><sub>p=1.000 n=10</sub></td>
+</tr>
+<tr class="measurement total scenario0 host0">
+<td align=left><sub>Total Time</sub></td>
+<td align=right><sub>1.69s (± 0.20%)</sub></td>
+<td align=right><sub>1.69s (± 0.29%)</sub></td>
+<td align=right><sub>~</sub></td>
+<td align=right><sub>1.69s</sub></td>
+<td align=right><sub>1.71s</sub></td>
+<td align=right><sub>p=0.925 n=10</sub></td>
+</tr>
+</tbody>
+</table>
+<div>
+<b>System</b>
+<table cellpadding="0" cellspacing="0" border="0" >
+<tr><th align=right><sub>Machine Name</sub></th><td><sub>CPC-gabri-8SHBT</sub></td></tr>
+<tr><th align=right><sub>Platform</sub></th><td><sub>linux 5.15.133.1-microsoft-standard-WSL2</sub></td></tr>
+<tr><th align=right><sub>Architecture</sub></th><td><sub>x64</sub></td></tr>
+<tr><th align=right><sub>Available Memory</sub></th><td><sub>31 GB</sub></td></tr>
+<tr><th align=right><sub>Available Memory</sub></th><td><sub>30 GB</sub></td></tr>
+<tr><th align=right><sub>CPUs</sub></th><td><sub>16 × AMD EPYC 7763 64-Core Processor</sub></td></tr>
+</table>
+</div>
+<div>
+<b>Hosts</b>
+<ul>
+<li>node (v20.11.0, x64)</li>
+</ul>
+</div>
+<div>
+<b>Scenarios</b>
+<ul>
+<li>overloadperf - node (v20.11.0, x64)</li>
+</ul>
+</div>
+<div>
+<table cellspacing="0" cellpadding="0" border="0" >
+<tr>
+<th align=left><sub>Benchmark</sub></th>
+<th align=left><sub>Name</sub></th>
+<th align=left><sub>Iterations</sub></th>
+</tr>
+<tr>
+<td><sub>Current</sub></td>
+<td><sub>gabritto/d2-detect</sub></td>
+<td><sub>10</sub></td>
+</tr>
+<tr>
+<td><sub>Baseline</sub></td>
+<td><sub>main</sub></td>
+<td><sub>10</sub></td>
+</tr>
+</table>
+</div>

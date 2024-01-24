@@ -1,0 +1,8 @@
+{
+    "name": "overloadperf",
+    "kind": "tsc",
+    "args": [
+        "-p",
+        "${suiteDirectory}/overloadperf/tsconfig.json"
+    ]
+}

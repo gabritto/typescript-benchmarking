@@ -1,0 +1,8 @@
+{
+    "name": "condperfany",
+    "kind": "tsc",
+    "args": [
+        "-p",
+        "${suiteDirectory}/condperfany/tsconfig.json"
+    ]
+}

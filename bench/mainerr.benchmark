@@ -1,0 +1,268 @@
+{
+  "version": "2",
+  "date": "2024-01-23T02:11:25.487Z",
+  "system": {
+    "platform": "linux",
+    "release": "5.15.133.1-microsoft-standard-WSL2",
+    "arch": "x64",
+    "totalmem": 33632350208,
+    "freemem": 32519872512,
+    "hostname": "CPC-gabri-8SHBT",
+    "username": "gabrielaa",
+    "cpus": [
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      },
+      {
+        "model": "AMD EPYC 7763 64-Core Processor",
+        "speed": 0
+      }
+    ]
+  },
+  "predictable": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/typescript.git",
+    "branch": "main",
+    "commit": "1982349339b9c1fd78c93195d572ffc6fd5041b0",
+    "date": "2024-01-19T20:44:01.000Z",
+    "subject": "Update dependencies to latest compatible versions (#56561)"
+  },
+  "iterations": 10,
+  "scenarios": [
+    {
+      "name": "condperf",
+      "kind": "tsc",
+      "args": [
+        "-p",
+        "${suiteDirectory}/condperf/tsconfig.json"
+      ]
+    }
+  ],
+  "hosts": [
+    {
+      "name": "node",
+      "arch": "x64",
+      "platform": "linux",
+      "version": "v20.11.0",
+      "executable": "/home/gabrielaa/.volta/tools/image/node/20.11.0/bin/node",
+      "default": false,
+      "current": true
+    }
+  ],
+  "measurements": [
+    {
+      "name": "condperf - node (v20.11.0, x64)",
+      "scenarioName": "condperf",
+      "scenarioArgs": 0,
+      "hostName": "node (v20.11.0, x64)",
+      "hostIndex": 0,
+      "host": {
+        "name": "node",
+        "version": "v20.11.0",
+        "arch": "x64"
+      },
+      "parseTime": {
+        "metric": "Parse Time",
+        "samples": [
+          0.92,
+          0.92,
+          0.91,
+          0.92,
+          0.93,
+          0.92,
+          0.93,
+          0.92,
+          0.92,
+          0.93
+        ],
+        "mean": 0.9219999999999999,
+        "minimum": 0.91,
+        "maximum": 0.93,
+        "marginOfError": 0.004456000000000004,
+        "variance": 0.00004000000000000007,
+        "standardDeviation": 0.006324555320336764,
+        "relativeMarginOfError": 0.004832971800433844,
+        "unit": "s",
+        "precision": 2
+      },
+      "bindTime": {
+        "metric": "Bind Time",
+        "samples": [
+          0.42,
+          0.41,
+          0.41,
+          0.42,
+          0.42,
+          0.42,
+          0.41,
+          0.42,
+          0.42,
+          0.41
+        ],
+        "mean": 0.41600000000000004,
+        "minimum": 0.41,
+        "maximum": 0.42,
+        "marginOfError": 0.0036383087646139505,
+        "variance": 0.000026666666666666714,
+        "standardDeviation": 0.005163977794943227,
+        "relativeMarginOfError": 0.008745934530321995,
+        "unit": "s",
+        "precision": 2
+      },
+      "checkTime": {
+        "metric": "Check Time",
+        "samples": [
+          0.44,
+          0.44,
+          0.44,
+          0.44,
+          0.44,
+          0.44,
+          0.44,
+          0.44,
+          0.45,
+          0.44
+        ],
+        "mean": 0.441,
+        "minimum": 0.44,
+        "maximum": 0.45,
+        "marginOfError": 0.002228000000000002,
+        "variance": 0.000010000000000000018,
+        "standardDeviation": 0.003162277660168382,
+        "relativeMarginOfError": 0.005052154195011343,
+        "unit": "s",
+        "precision": 2
+      },
+      "emitTime": {
+        "metric": "Emit Time",
+        "samples": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "mean": 0,
+        "minimum": 0,
+        "maximum": 0,
+        "marginOfError": 0,
+        "variance": 0,
+        "standardDeviation": 0,
+        "relativeMarginOfError": null,
+        "unit": "s",
+        "precision": 2
+      },
+      "totalTime": {
+        "metric": "Total Time",
+        "samples": [
+          1.78,
+          1.78,
+          1.76,
+          1.77,
+          1.79,
+          1.78,
+          1.79,
+          1.78,
+          1.79,
+          1.79
+        ],
+        "mean": 1.781,
+        "minimum": 1.76,
+        "maximum": 1.79,
+        "marginOfError": 0.007006303320740712,
+        "variance": 0.00009888888888888908,
+        "standardDeviation": 0.009944289260117542,
+        "relativeMarginOfError": 0.003933915396260927,
+        "unit": "s",
+        "precision": 2
+      },
+      "memoryUsed": {
+        "metric": "Memory used",
+        "samples": [
+          89790,
+          89790,
+          89790,
+          89790,
+          89790,
+          89790,
+          89790,
+          89790,
+          89790,
+          89790
+        ],
+        "mean": 89790,
+        "minimum": 89790,
+        "maximum": 89790,
+        "marginOfError": 0,
+        "variance": 0,
+        "standardDeviation": 0,
+        "relativeMarginOfError": 0,
+        "unit": "k",
+        "precision": 0
+      }
+    }
+  ]
+}

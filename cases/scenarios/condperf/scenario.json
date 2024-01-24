@@ -1,0 +1,8 @@
+{
+    "name": "condperf",
+    "kind": "tsc",
+    "args": [
+        "-p",
+        "${suiteDirectory}/condperf/tsconfig.json"
+    ]
+}
