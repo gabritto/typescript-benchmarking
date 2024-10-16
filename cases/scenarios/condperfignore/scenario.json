@@ -1,8 +1,0 @@
-{
-    "name": "condperfignore",
-    "kind": "tsc",
-    "args": [
-        "-p",
-        "${suiteDirectory}/condperfignore/tsconfig.json"
-    ]
-}

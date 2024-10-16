@@ -3,6 +3,8 @@
         "strict": true,
         "target": "ESNext",
         "noEmit": true,
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "allowJs": true,
+        "checkJs": true
     }
 }

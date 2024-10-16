@@ -5,6 +5,7 @@
         "noEmit": true,
         "skipLibCheck": true,
         "allowJs": true,
-        "checkJs": true
+        "checkJs": true,
+        "exactOptionalPropertyTypes": true
     }
 }
