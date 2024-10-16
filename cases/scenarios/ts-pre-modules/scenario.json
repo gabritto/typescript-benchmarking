@@ -1,0 +1,15 @@
+{
+    "name": "ts-pre-modules",
+    "kind": "tsc",
+    "args": [
+        "-p",
+        "${suiteDirectory}/ts-pre-modules/src/compiler",
+        "--outfile",
+        "${outDirectory}/out.js",
+        "--composite",
+        "false"
+    ],
+    "platforms": [
+        "linux"
+    ]
+}

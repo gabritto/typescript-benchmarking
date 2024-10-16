@@ -6,6 +6,7 @@ import {
     Command,
     CommandLineArgumentsBuilder,
     CommandMap,
+    CommonOptions,
     CompilerOptions,
     ExpansionProvider,
     ExpansionProviderSet,
@@ -15,9 +16,8 @@ import {
 import { getTempDirectories, HostContext } from "@ts-perf/core";
 import * as semver from "semver";
 
-export interface TraceOptions extends CompilerOptions {
+export interface TraceOptions extends CompilerOptions, CommonOptions {
     scenario: string;
-    scenarioConfigDirs?: string[];
     outDir?: string;
     host?: string;
     deoptExplorer?: boolean;
@@ -25,7 +25,7 @@ export interface TraceOptions extends CompilerOptions {
 }
 
 export async function trace(options: TraceOptions, host: HostContext) {
-    const scenario = await Scenario.findScenario(options.scenarioConfigDirs, options.scenario, /*kind*/ "tsc");
+    const scenario = await Scenario.findScenario(options.scenario, { scenarioDir: options.scenarioDir, kind: "tsc" });
 
     if (!scenario) {
         host.error(`abort: Compiler scenario not found.`);
@@ -83,6 +83,7 @@ async function traceHydrogen(
     await fs.promises.rm(outDir, { recursive: true, force: true });
     await fs.promises.mkdir(outDir, { recursive: true });
 
+    const tsc = path.join(options.builtDir, "tsc.js");
     const { cmd, args } = new CommandLineArgumentsBuilder(localExpansion, testHost)
         .add("--trace-hydrogen")
         .add(`--trace-hydrogen-file=${hydrogen}`)
@@ -92,7 +93,7 @@ async function traceHydrogen(
         .add("--hydrogen-track-positions")
         .add("--redirect-code-traces")
         .add(`--redirect-code-traces-to=${code}`)
-        .add(options.tsc)
+        .add(tsc)
         .addCompilerOptions(options, scenario);
 
     host.log(`Tracing Hydrogen IR deoptimizations for '${name}' (this may take awhile)...`);
@@ -136,6 +137,7 @@ async function traceTurbofan(
     try {
         process.chdir(outDir);
 
+        const tsc = path.join(options.builtDir, "tsc.js");
         const { cmd, args } = new CommandLineArgumentsBuilder(localExpansion, testHost, /*exposeGc*/ false)
             .add(`--no-concurrent-recompilation`)
             .add(`--trace-turbo`)
@@ -144,7 +146,7 @@ async function traceTurbofan(
             .add("--redirect-code-traces")
             .add("--redirect-code-traces-to=code.asm")
             .add("--print-all-code")
-            .add(options.tsc)
+            .add(tsc)
             .addCompilerOptions(options, scenario);
 
         host.log(`Tracing TurboFan IR deoptimizations for '${name}' (this may take awhile)...`);
@@ -214,6 +216,7 @@ async function traceDeoptExplorer(
     try {
         process.chdir(outDir);
 
+        const tsc = path.join(options.builtDir, "tsc.js");
         const { cmd, args } = new CommandLineArgumentsBuilder(localExpansion, testHost, /*exposeGc*/ false)
             .add(`--trace-ic`)
             .add(`--trace-maps`)
@@ -221,7 +224,7 @@ async function traceDeoptExplorer(
             .add(`--log-internal-timer-events`)
             .add(`--no-logfile-per-isolate`)
             .add(`--logfile=${path.basename(outFile)}`)
-            .add(options.tsc)
+            .add(tsc)
             .addCompilerOptions(options, scenario);
 
         host.log(`Tracing deoptimizations for '${name}' (this may take awhile)...`);
@@ -261,7 +264,7 @@ const command: Command<TraceOptions> = {
     commandName: "trace",
     summary: "Trace deoptimizations in NodeJS (v8).",
     description: "Trace deoptimizations in NodeJS (v8).",
-    include: ["compiler", "remote"],
+    include: ["compiler", "remote", "common"],
     options: {
         outDir: {
             type: "string",
@@ -274,15 +277,6 @@ const command: Command<TraceOptions> = {
             param: "file",
             description: "Saves the trace output to <file>.",
             group: "deoptExplorer",
-        },
-        scenarioConfigDirs: {
-            type: "string",
-            longName: "scenarioConfigDir",
-            alias: "scenarioConfigDirs",
-            defaultValue: () => [],
-            param: "directory",
-            multiple: true,
-            description: "Paths to directories containing scenario JSON files.",
         },
         scenario: {
             type: "string",

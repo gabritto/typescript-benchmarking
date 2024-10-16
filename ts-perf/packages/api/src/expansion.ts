@@ -64,13 +64,13 @@ export class CompilerOptionsExpansionProvider extends ExpansionProvider {
             case "suite":
             case "suitedir":
             case "suitedirectory":
-                return this.options.suite;
+                return this.options.suiteDir;
             case "tsc":
-                return this.options.tsc;
+                return path.join(this.options.builtDir, "tsc.js");
             case "typescript":
             case "typescriptdir":
             case "typescriptdirectory":
-                return this.options.tsc && path.dirname(this.options.tsc);
+                return this.options.builtDir;
         }
 
         return undefined;
@@ -90,13 +90,13 @@ export class TSServerOptionsExpansionProvider extends ExpansionProvider {
             case "suite":
             case "suitedir":
             case "suitedirectory":
-                return this.options.suite;
+                return this.options.suiteDir;
             case "tsserver":
-                return this.options.tsserver;
+                return path.join(this.options.builtDir, "tsserver.js");
             case "typescript":
             case "typescriptdir":
             case "typescriptdirectory":
-                return this.options.tsserver && path.dirname(this.options.tsserver);
+                return this.options.builtDir;
         }
 
         return undefined;

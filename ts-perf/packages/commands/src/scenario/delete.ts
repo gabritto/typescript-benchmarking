@@ -1,17 +1,17 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { Command, CommandMap, CompilerOptions, Scenario } from "@ts-perf/api";
+import { Command, CommandMap, CommonOptions, CompilerOptions, Scenario } from "@ts-perf/api";
 import { HostContext } from "@ts-perf/core";
 
-export interface DeleteScenarioOptions extends CompilerOptions {
-    scenarioConfigDir?: string[];
+export interface DeleteScenarioOptions extends CompilerOptions, CommonOptions {
     scenario: string;
     recursive?: boolean;
 }
 
 export async function deleteScenario(options: DeleteScenarioOptions, context: HostContext) {
-    const scenarios = await Scenario.findScenarios(options.scenarioConfigDir, [options.scenario], /*kind*/ undefined, {
+    const scenarios = await Scenario.findScenarios([options.scenario], {
+        scenarioDir: options.scenarioDir,
         includeUnsupported: true,
     });
     if (scenarios.length === 0) {
@@ -55,16 +55,8 @@ const command: Command<DeleteScenarioOptions> = {
     summary: "Delete a scenario.",
     description: "Delete a scenario.",
     alias: ["rm"],
+    include: ["common"],
     options: {
-        scenarioConfigDirs: {
-            type: "string",
-            longName: "scenarioConfigDir",
-            alias: "scenarioConfigDirs",
-            defaultValue: () => [],
-            param: "directory",
-            multiple: true,
-            description: "Paths to directories containing scenario JSON files.",
-        },
         scenario: {
             type: "string",
             longName: "scenario",

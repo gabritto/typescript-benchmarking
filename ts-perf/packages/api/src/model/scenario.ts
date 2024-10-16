@@ -1,35 +1,42 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { localScenariosDirectory } from "@ts-perf/core";
+import { HashMap } from "@esfx/collections-hashmap";
+import { HashSet } from "@esfx/collections-hashset";
+import { containsPath, localScenariosDirectory, PathComparer, StringComparer } from "@ts-perf/core";
 
-import { StringComparer } from "../utils";
 import { TSServerConfig } from "./tsserverconfig";
 
-const cachedScenarios = new Map<string, Scenario[]>();
+const cachedScenarios = new HashMap<string, Scenario[]>(PathComparer.fileSystem);
 
 export type ScenarioKind = "tsserver" | "tsc" | "startup";
+
+export interface TscConfig {
+    usePublicApi?: boolean;
+}
 
 export interface ScenarioComponents {
     name: string;
     kind: ScenarioKind;
-    args?: string[];
+    args?: readonly string[];
     default?: boolean;
     disabled?: boolean;
-    platforms?: string[];
+    platforms?: readonly string[];
     configFile: string;
     tsserverConfig?: TSServerConfig;
+    tscConfig?: TscConfig;
 }
 
 export class Scenario {
     public readonly name: string;
     public readonly kind: ScenarioKind;
-    public readonly args?: string[];
+    public readonly args?: readonly string[];
     public readonly default?: boolean;
     public readonly disabled?: boolean;
-    public readonly platforms?: string[];
+    public readonly platforms?: readonly string[];
     public readonly configFile: string;
     public readonly tsserverConfig?: TSServerConfig;
+    public readonly tscConfig?: TscConfig;
 
     public isLocal?: boolean;
     public isOverriding?: boolean;
@@ -38,12 +45,13 @@ export class Scenario {
         name: string,
         kind: ScenarioKind,
         configFile: string,
-        args?: string[],
+        args?: readonly string[],
         options?: {
             default?: boolean;
             disabled?: boolean;
-            platforms?: string[];
+            platforms?: readonly string[];
             tsserverConfig?: TSServerConfig;
+            tscConfig?: TscConfig;
         },
     ) {
         if (kind === "tsserver" && !options?.tsserverConfig) {
@@ -52,11 +60,12 @@ export class Scenario {
         this.name = name;
         this.kind = kind;
         this.args = args;
-        this.default = options && options.default;
-        this.disabled = options && options.disabled;
-        this.platforms = options && options.platforms;
+        this.default = options?.default;
+        this.disabled = options?.disabled;
+        this.platforms = options?.platforms;
         this.configFile = configFile;
-        this.tsserverConfig = options && options.tsserverConfig;
+        this.tsserverConfig = options?.tsserverConfig;
+        this.tscConfig = options?.tscConfig;
     }
 
     public get supported() {
@@ -74,7 +83,8 @@ export class Scenario {
     }
 
     public static parse(text: string) {
-        return this.create(JSON.parse(text) as ScenarioComponents);
+        const parsed = JSON.parse(text) as Omit<ScenarioComponents, "configFile">;
+        return this.create({ configFile: "", ...parsed });
     }
 
     public static async loadAsync(file: string) {
@@ -85,29 +95,36 @@ export class Scenario {
     /**
      * Produces a list of resolved scenario dirs in precedence order.
      */
-    public static getScenarioConfigDirs(scenarioConfigDirs: string[] | undefined) {
-        const dirs = [localScenariosDirectory, ...(scenarioConfigDirs ?? [])];
-        return [...new Set(dirs.map(dir => path.resolve(dir)).reverse())];
+    public static getScenarioDirs(scenarioDir: string | undefined) {
+        if (scenarioDir) {
+            scenarioDir = path.resolve(scenarioDir);
+            if (!PathComparer.fileSystem.equals(scenarioDir, localScenariosDirectory)) {
+                return [scenarioDir, localScenariosDirectory];
+            }
+        }
+        return [localScenariosDirectory];
     }
 
     public static async getAvailableScenarios(
-        scenarioConfigDirs: string[] | undefined,
-        options?: { ignoreCache?: boolean; },
+        options?: {
+            scenarioDir?: string | undefined;
+            ignoreCache?: boolean | undefined;
+        },
     ) {
-        scenarioConfigDirs = this.getScenarioConfigDirs(scenarioConfigDirs);
-
+        const scenarioDirs = this.getScenarioDirs(options?.scenarioDir);
+        const scenariosByName = new HashMap<string, Scenario>(StringComparer.caseInsensitive);
         const scenarios: Scenario[] = [];
-        for (const scenarioConfigDir of scenarioConfigDirs) {
-            scenarioLoop:
-            for (const scenario of await this.getAvailableScenariosForDir(scenarioConfigDir, options)) {
-                for (const other of scenarios) {
-                    if (other.name === scenario.name) {
-                        scenario.isOverriding = true;
-                        console.log(
-                            `Warning: scenario '${scenario.configFile}' is overriding ${other.configFile}.`,
-                        );
-                        continue scenarioLoop;
-                    }
+        for (const scenarioDir of scenarioDirs) {
+            for (const scenario of await this.getAvailableScenariosForDir(scenarioDir, options)) {
+                const existingScenario = scenariosByName.get(scenario.name);
+                if (existingScenario) {
+                    scenario.isOverriding = true;
+                    console.log(
+                        `Warning: scenario '${scenario.configFile}' is overrides ${existingScenario.configFile}.`,
+                    );
+                }
+                else {
+                    scenariosByName.set(scenario.name, scenario);
                 }
                 scenarios.push(scenario);
             }
@@ -116,87 +133,63 @@ export class Scenario {
     }
 
     private static async getAvailableScenariosForDir(
-        scenarioConfigDir: string,
+        scenarioDir: string,
         options?: { ignoreCache?: boolean; },
     ) {
-        let scenarios = cachedScenarios.get(scenarioConfigDir);
+        const isLocal = containsPath(localScenariosDirectory, scenarioDir, StringComparer.fileSystem);
+        let scenarios = cachedScenarios.get(scenarioDir);
         if (!scenarios || options?.ignoreCache) {
             scenarios = [];
-            if (fs.existsSync(scenarioConfigDir)) {
-                for (const container of await fs.promises.readdir(scenarioConfigDir)) {
-                    const file = path.join(scenarioConfigDir, container, "scenario.json");
+            if (fs.existsSync(scenarioDir)) {
+                for (const container of await fs.promises.readdir(scenarioDir)) {
+                    const file = path.join(scenarioDir, container, "scenario.json");
                     try {
                         const scenario = await Scenario.loadAsync(file);
-                        scenario.isLocal = true;
+                        scenario.isLocal = isLocal;
                         scenarios.push(scenario);
                     }
                     catch (e) {
                     }
                 }
             }
-            cachedScenarios.set(scenarioConfigDir, scenarios);
+            cachedScenarios.set(scenarioDir, scenarios);
         }
         return scenarios.slice();
     }
 
-    public static async getDefaultScenarios(
-        scenarioConfigDirs: string[] | undefined,
-        options?: { includeUnsupported?: boolean; },
-    ) {
-        const availableScenarios = await this.getAvailableScenarios(scenarioConfigDirs);
-        return availableScenarios
-            .filter(scenario =>
-                !scenario.disabled
-                && (scenario.supported || (options && options.includeUnsupported))
-            );
-    }
-
-    public static async findMatchingScenarios(
-        scenarioConfigDirs: string[] | undefined,
-        scenarios: string[],
-        kind?: ScenarioKind,
-        options?: { includeUnsupported?: boolean; },
-    ) {
-        const availableScenarios = await this.getAvailableScenarios(scenarioConfigDirs);
-        return availableScenarios
-            .filter(scenario =>
-                (scenario.supported || (options && options.includeUnsupported))
-                && scenarios.some(scenarioName => StringComparer.caseInsensitive.equals(scenarioName, scenario.name))
-                && (!kind || scenario.kind === kind)
-            );
-    }
-
     public static async findScenarios(
-        scenarioConfigDirs: string[] | undefined,
         scenarios?: string[],
-        kind?: ScenarioKind,
-        options?: { includeUnsupported?: boolean; },
+        options?: {
+            scenarioDir?: string | undefined;
+            kind?: ScenarioKind | undefined;
+            includeUnsupported?: boolean | undefined;
+            includeDisabled?: boolean | undefined;
+        },
     ) {
-        if (scenarios && scenarios.length) {
-            return await this.findMatchingScenarios(scenarioConfigDirs, scenarios, kind, options);
-        }
-        else {
-            const defaultScenarios = await this.getDefaultScenarios(scenarioConfigDirs, options);
-            return kind ? defaultScenarios.filter(scenario => scenario.kind === kind) : defaultScenarios;
-        }
+        const scenarioSet = scenarios?.length ? new HashSet(scenarios, StringComparer.caseInsensitive) : undefined;
+        const availableScenarios = await this.getAvailableScenarios({ scenarioDir: options?.scenarioDir });
+        return availableScenarios.filter(scenario =>
+            (!scenarioSet || scenarioSet.has(scenario.name))
+            && (!options?.kind || scenario.kind === options.kind)
+            && (!!options?.includeDisabled || !!scenarioSet || !scenario.disabled)
+            && (!!options?.includeUnsupported || scenario.supported)
+        );
     }
 
     public static async findScenario(
-        scenarioConfigDirs: string[] | undefined,
         scenario: string,
-        kind?: ScenarioKind,
-        options?: { includeUnsupported?: boolean; },
+        options?: {
+            scenarioDir?: string | undefined;
+            kind?: ScenarioKind | undefined;
+            includeUnsupported?: boolean | undefined;
+            includeDisabled?: boolean | undefined;
+        },
     ) {
-        const matchingScenarios = await this.findScenarios(
-            scenarioConfigDirs,
-            scenario ? [scenario] : undefined,
-            kind,
-            options,
-        );
+        const matchingScenarios = await this.findScenarios([scenario], options);
         if (matchingScenarios.length === 0) {
             return undefined;
         }
-        else if (matchingScenarios.length === 1) {
+        if (matchingScenarios.length === 1) {
             return matchingScenarios[0];
         }
 
@@ -217,10 +210,10 @@ export class Scenario {
         return {
             name: this.name,
             kind: this.kind,
-            args: this.args && this.args.slice(),
+            args: this.args?.slice(),
             default: this.default,
             disabled: this.disabled,
-            platforms: this.platforms && this.platforms.slice(),
+            platforms: this.platforms?.slice(),
             configFile: this.configFile,
         };
     }
@@ -239,6 +232,7 @@ export class Scenario {
         const { platforms = this.platforms } = components;
         const { configFile = this.configFile } = components;
         const { tsserverConfig = this.tsserverConfig } = components;
+        const { tscConfig = this.tscConfig } = components;
         if (
             this.name === name
             && this.kind === kind
@@ -256,6 +250,7 @@ export class Scenario {
             disabled,
             platforms,
             tsserverConfig,
+            tscConfig,
         });
     }
 
@@ -263,15 +258,16 @@ export class Scenario {
         return this.name;
     }
 
-    public toJSON(): any {
+    public toJSON(): Omit<ScenarioComponents, "configFile"> {
         return {
             name: this.name,
             kind: this.kind,
-            args: this.args && this.args.slice(),
+            args: this.args?.slice(),
             default: this.default,
             disabled: this.disabled,
-            platforms: this.platforms && this.platforms.slice(),
+            platforms: this.platforms?.slice(),
             tsserverConfig: this.tsserverConfig,
+            tscConfig: this.tscConfig,
         };
     }
 }

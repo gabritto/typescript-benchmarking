@@ -1,12 +1,9 @@
 import assert from "node:assert";
 import path from "node:path";
 
-import { $ as _$ } from "execa";
 import minimist from "minimist";
 
-import { checkNonEmpty, getNonEmptyEnv, getRepoInfo } from "./utils.js";
-
-const $ = _$({ verbose: true, stdio: "inherit" });
+import { $, checkNonEmpty, getNonEmptyEnv, getRepoInfo, parseBoolean } from "./utils.js";
 
 const [subcommand, ...rawArgs] = process.argv.slice(2);
 
@@ -35,22 +32,16 @@ async function installHosts() {
     await $`node ${tsperfExe} host install --host ${host}`;
 }
 
-function getLocationBasedArgs(benchmarking: boolean) {
-    const locations = getNonEmptyEnv(benchmarking ? "TSPERF_JOB_LOCATION" : "TSPERF_PROCESS_LOCATIONS").split(",");
-    const tsperfArgs = [];
+function getLocationBasedArgs() {
+    const scenarioConfigDir = getNonEmptyEnv(`TSPERF_SCENARIO_CONFIG_DIR`);
+    const suiteDir = getNonEmptyEnv(`TSPERF_SUITE_DIR`);
 
-    for (const location of locations) {
-        const locationUpper = location.toUpperCase();
-        const scenarioConfigDir = getNonEmptyEnv(`TSPERF_${locationUpper}_SCENARIO_CONFIG_DIR`);
-        tsperfArgs.push("--scenarioConfigDir", scenarioConfigDir);
-
-        if (benchmarking) {
-            const suiteDir = getNonEmptyEnv(`TSPERF_${locationUpper}_SUITE_DIR`);
-            tsperfArgs.push("--suite", suiteDir);
-        }
-    }
-
-    return tsperfArgs;
+    return [
+        "--scenarioConfigDir",
+        scenarioConfigDir,
+        "--suite",
+        suiteDir,
+    ];
 }
 
 async function getCommonBenchmarkArgs() {
@@ -63,27 +54,34 @@ async function getCommonBenchmarkArgs() {
         const host = getNonEmptyEnv("TSPERF_JOB_HOST");
         const scenario = getNonEmptyEnv("TSPERF_JOB_SCENARIO");
         const iterations = getNonEmptyEnv("TSPERF_JOB_ITERATIONS");
+        const warmups = getNonEmptyEnv("TSPERF_JOB_WARMUPS");
+        const predictable = parseBoolean(getNonEmptyEnv("TSPERF_PREDICTABLE"), false);
         const cpu = getNonEmptyEnv("TSPERF_AGENT_BENCHMARK_CPU");
         const info = await getRepoInfo(args.builtDir);
 
         tsperfArgs.push("--host", host);
         tsperfArgs.push("--scenario", scenario);
         tsperfArgs.push("--iterations", iterations);
+        tsperfArgs.push("--warmups", warmups);
         tsperfArgs.push("--cpus", cpu);
+        if (predictable) {
+            tsperfArgs.push("--predictable");
+        }
 
         tsperfArgs.push("--date", info.date);
         tsperfArgs.push("--repositoryType", "git");
         tsperfArgs.push("--repositoryUrl", "https://github.com/microsoft/TypeScript");
-        tsperfArgs.push("--repositoryBranch", info.branch);
+        if (info.branch) {
+            tsperfArgs.push("--repositoryBranch", info.branch);
+        }
         tsperfArgs.push("--repositoryCommit", info.commit);
         tsperfArgs.push("--repositoryDate", info.date);
     }
     else {
         if (args.saveBlob) {
             const info = await getRepoInfo(args.builtDir);
+            assert(info.branch, "Expected branch to be set in repo info");
 
-            // ts-perf accepts this as an env var, just check that it exists for an early error.
-            getNonEmptyEnv("TSPERF_AZURE_STORAGE_CONNECTION_STRING");
             tsperfArgs.push(
                 "--save",
                 `blob:${info.branch}/${info.timestampDir}/${info.commitShort}.${args.saveBlob}.benchmark`,
@@ -118,27 +116,25 @@ async function getCommonBenchmarkArgs() {
         }
     }
 
-    tsperfArgs.push(...getLocationBasedArgs(args.save));
+    tsperfArgs.push(...getLocationBasedArgs());
 
     return tsperfArgs;
 }
 
 async function benchmarkTsc() {
     const builtDir = checkNonEmpty(args.builtDir, "Expected non-empty --builtDir");
-    const tscPath = path.join(builtDir, "tsc.js");
 
     const tsperfArgs = await getCommonBenchmarkArgs();
 
-    await $`node ${tsperfExe} benchmark tsc --tsc ${tscPath} ${tsperfArgs}`;
+    await $`node ${tsperfExe} benchmark tsc --builtDir ${builtDir} ${tsperfArgs}`;
 }
 
 async function benchmarkTsserver() {
     const builtDir = checkNonEmpty(args.builtDir, "Expected non-empty --builtDir");
-    const tsserverPath = path.join(builtDir, "tsserver.js");
 
     const tsperfArgs = await getCommonBenchmarkArgs();
 
-    await $`node ${tsperfExe} benchmark tsserver --tsserver ${tsserverPath} ${tsperfArgs}`;
+    await $`node ${tsperfExe} benchmark tsserver --builtDir ${builtDir} ${tsperfArgs}`;
 }
 
 async function benchmarkStartup() {

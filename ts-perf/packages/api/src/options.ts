@@ -1,67 +1,93 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { localSuiteDirectory } from "@ts-perf/core";
 import { CommandLineOption, CommandLineOptionSet, CommandLineOptionSets, CommandLineParseError } from "power-options";
 
-export interface CompilerOptions {
-    tsc: string;
-    suite: string;
+export interface CommonOptions {
+    scenarioDir?: string;
+}
+
+export interface CompilerOptions extends CommonOptions {
+    builtDir: string;
+    suiteDir: string;
     compilerOptions?: string[];
 }
 
-export interface TSServerOptions {
-    tsserver: string;
-    suite: string;
+export interface TSServerOptions extends CommonOptions {
+    builtDir: string;
+    suiteDir: string;
     extended: boolean;
 }
 
-export interface StartupOptions {
+export interface StartupOptions extends CommonOptions {
     builtDir: string;
 }
 
-const suite: CommandLineOption = {
+const suiteDir: CommandLineOption = {
     type: "string",
+    alias: "suite",
     validate: validatePath,
-    defaultValue(parsed) {
-        const tsc = parsed["tsc"] as string;
-        const suite = findPath(process.cwd(), "./cases/perf/solutions")
-            || (process.env.TYPESCRIPT_INTERNAL_REPOSITORY
-                && findPath(process.env.TYPESCRIPT_INTERNAL_REPOSITORY, "./cases/perf/solutions"))
-            || (tsc && findPath(path.dirname(tsc), "./internal/cases/perf/solutions"))
-            || findPath(__dirname, "./cases/perf/solutions");
+    defaultValue() {
+        const suite = findPath(process.env.TSPERF_SUITE_DIR, /*relative*/ undefined, /*walkUpParents*/ false)
+            || findPath(localSuiteDirectory, /*relative*/ undefined, /*walkUpParents*/ false);
         if (!suite) {
             throw new CommandLineParseError(
-                `Could not resolve the path to the test suite (i.e. './cases/perf/solutions'). Try specifying '--suite'.`,
+                `Could not resolve the path to the test suite (i.e. './cases/solutions'). Try specifying '--suiteDir'.`,
             );
         }
         return suite;
     },
     param: "directory",
-    description: "Use <directory> as the root location for test suites (i.e. './internal/cases/perf/solutions').",
+    description:
+        "Use <directory> as the root location for test suites (i.e. './cases/solutions'). If not set, uses TSPERF_SUITE_DIR environment variable, if found. Otherwise, uses '~/.tsperf/solutions', if present.",
+};
+
+const scenarioDir: CommandLineOption = {
+    type: "string",
+    longName: "scenarioDir",
+    alias: ["scenarioDirs", "scenarioConfigDir", "scenarioConfigDirs"],
+    validate: validatePath,
+    defaultValue() {
+        return findPath(process.env.TSPERF_SCENARIO_DIR, /*relative*/ undefined, /*walkUpParents*/ false);
+    },
+    param: "directory",
+    description:
+        "Use <directory> as a location containing individual test scenario folders each with a 'scenario.json'. If not set, uses TSPERF_SCENARIO_DIR environment variable, if found. '~/.tsperf/solutions' will always be included, if present.",
+};
+
+const builtDir: CommandLineOption = {
+    type: "string",
+    validate: validatePath,
+    defaultValue() {
+        const builtDir = findPath(process.env.TSPERF_BUILT_DIR, /*relative*/ undefined, /*walkUpParents*/ false)
+            || findPath(process.cwd(), "./built/local", /*walkUpParents*/ true)
+            || findPath(process.env.TYPESCRIPT_REPOSITORY, "./built/local", /*walkUpParents*/ false);
+        if (!builtDir) {
+            throw new CommandLineParseError(
+                `Could not resolve the path to the built directory (i.e. './built/local'). Try specifying '--builtDir'.`,
+            );
+        }
+        return builtDir;
+    },
+    param: "directory",
+    description:
+        "Use <directory> as the built local dir (i.e. './built/local'). If not set, uses TSPERF_BUILT_DIR environment variable, if found. Otherwise, walks up from the current directory looking for './built/local'",
+};
+
+const common: CommandLineOptionSet = {
+    merge: true,
+    options: {
+        scenarioDir,
+    },
 };
 
 const compiler: CommandLineOptionSet = {
     merge: true,
+    include: ["common"],
     options: {
-        tsc: {
-            type: "string",
-            validate: validatePath,
-            defaultValue() {
-                const tsc = findPath(process.cwd(), "./built/local/tsc.js")
-                    || (process.env.TYPESCRIPT_REPOSITORY
-                        && findPath(process.env.TYPESCRIPT_REPOSITORY, "./built/local/tsc.js"))
-                    || findPath(__dirname, "./built/local/tsc.js");
-                if (!tsc) {
-                    throw new CommandLineParseError(
-                        `Could not resolve the path to the built compiler (i.e. './built/local/tsc.js'). Try specifying '--tsc'.`,
-                    );
-                }
-                return tsc;
-            },
-            param: "file",
-            description: "Use <file> as the compiler (i.e. './built/local/tsc.js').",
-        },
-        suite,
+        builtDir,
+        suiteDir,
         compilerOptions: {
             type: "string",
             passthru: true,
@@ -72,26 +98,10 @@ const compiler: CommandLineOptionSet = {
 
 const tsserver: CommandLineOptionSet = {
     merge: true,
+    include: ["common"],
     options: {
-        tsserver: {
-            type: "string",
-            validate: validatePath,
-            defaultValue() {
-                const tsserver = findPath(process.cwd(), "./built/local/tsserver.js")
-                    || (process.env.TYPESCRIPT_REPOSITORY
-                        && findPath(process.env.TYPESCRIPT_REPOSITORY, "./built/local/tsserver.js"))
-                    || findPath(__dirname, "./built/local/tsserver.js");
-                if (!tsserver) {
-                    throw new CommandLineParseError(
-                        `Could not resolve the path to the built tsserver (i.e. './built/local/tsserver.js'). Try specifying '--tsserver'.`,
-                    );
-                }
-                return tsserver;
-            },
-            param: "file",
-            description: "Use <file> as the tsserver (i.e. './built/local/tsserver.js').",
-        },
-        suite,
+        builtDir,
+        suiteDir,
         extended: {
             type: "boolean",
             description: "If the scenario declares optional (aka extended) requests, run those as well.",
@@ -102,26 +112,10 @@ const tsserver: CommandLineOptionSet = {
 
 const startup: CommandLineOptionSet = {
     merge: true,
+    include: ["common"],
     options: {
-        builtDir: {
-            type: "string",
-            validate: validatePath,
-            defaultValue() {
-                const builtDir = findPath(process.cwd(), "./built/local")
-                    || (process.env.TYPESCRIPT_REPOSITORY
-                        && findPath(process.env.TYPESCRIPT_REPOSITORY, "./built/local"))
-                    || findPath(__dirname, "./built/local");
-                if (!builtDir) {
-                    throw new CommandLineParseError(
-                        `Could not resolve the path to the built directory (i.e. './built/local'). Try specifying '--builtDir'.`,
-                    );
-                }
-                return builtDir;
-            },
-            param: "directory",
-            description: "Use <directory> as the built local dir (i.e. './built/local').",
-        },
-        suite,
+        builtDir,
+        suiteDir,
     },
 };
 
@@ -136,62 +130,63 @@ const azureStorage: CommandLineOptionSet = {
     merge: true,
     visibility: "advanced",
     options: {
-        azureStorageConnectionString: {
-            type: "string",
-            param: "string",
-            description:
-                "Azure storage connection string (uses TSPERF_AZURE_STORAGE_CONNECTION_STRING environment variable if found).",
-            defaultValue: () => process.env.TSPERF_AZURE_STORAGE_CONNECTION_STRING!,
-        },
         azureStorageAccount: {
             type: "string",
             param: "name",
             description:
-                "Azure storage account when using blob storage (uses TSPERF_AZURE_STORAGE_ACCOUNT environment variable if found).",
-            defaultValue: () => process.env.TSPERF_AZURE_STORAGE_ACCOUNT!,
-        },
-        azureStorageAccessKey: {
-            type: "string",
-            param: "key",
-            description:
-                "Azure storage access key when using blob storage (uses TSPERF_AZURE_STORAGE_ACCESS_KEY environment variable if found).",
-            defaultValue: () => process.env.TSPERF_AZURE_STORAGE_ACCESS_KEY!,
+                "Azure storage account when using blob storage. If not set, uses TSPERF_AZURE_STORAGE_ACCOUNT environment variable, if found.",
+            defaultValue: () => process.env.TSPERF_AZURE_STORAGE_ACCOUNT,
         },
         azureStorageContainer: {
             type: "string",
             param: "container",
             description:
-                "Container to use when using blob storage (uses TSPERF_AZURE_STORAGE_CONTAINER environment variable if found).",
-            defaultValue: () => process.env.TSPERF_AZURE_STORAGE_CONTAINER!,
+                "Container to use when using blob storage. If not set, uses TSPERF_AZURE_STORAGE_CONTAINER environment variable, if found.",
+            defaultValue: () => process.env.TSPERF_AZURE_STORAGE_CONTAINER,
         },
     },
 };
 
 export const optionSets: CommandLineOptionSets = {
+    common,
     compiler,
     tsserver,
     startup,
     azureStorage,
 };
 
-function validatePath(value: string, arg: string) {
-    if (!fs.existsSync(value)) {
-        throw new CommandLineParseError(`Option '${arg}' path not found: '${value}'.`);
+function validatePath(values: string | string[], arg: string) {
+    for (const value of Array.isArray(values) ? values : [values]) {
+        if (!fs.existsSync(value)) {
+            throw new CommandLineParseError(`Option '${arg}' path not found: '${value}'.`);
+        }
     }
 }
 
-function findPath(root: string, relative: string) {
-    root = path.resolve(root);
-    while (root) {
-        const tscPath = path.resolve(root, relative);
-        if (fs.existsSync(tscPath)) {
-            return tscPath;
-        }
+function findPath(dirname: string | undefined, relative: string | undefined, walkUpParents: boolean) {
+    if (dirname) {
+        dirname = path.resolve(dirname);
+        while (dirname) {
+            const candidate = relative ? path.resolve(dirname, relative) : dirname;
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
 
-        if (/^(\/|[a-z]:[\\/]?)$/i.test(root)) {
-            break;
-        }
+            if (!walkUpParents) {
+                break;
+            }
 
-        root = path.dirname(root);
+            if (/^(\/|[a-z]:[\\/]?)$/i.test(dirname)) {
+                break;
+            }
+
+            dirname = path.dirname(dirname);
+        }
+    }
+    else if (relative && path.isAbsolute(relative)) {
+        relative = path.resolve(relative);
+        if (fs.existsSync(relative)) {
+            return relative;
+        }
     }
 }

@@ -9,13 +9,18 @@ import {
     CommandLineArgumentsBuilder,
     CompilerOptions,
     CompilerSample,
+    compilerSampleKeys,
     computeMetrics,
     ExpansionProvider,
     formatProgress,
     formatScenarioAndTestHost,
     formatTestHost,
+    getCompilerMetricName,
+    getCompilerSampleKeyUnit,
+    getCompilerSampleNameFromDiagnosticName,
     Host,
     HostSpecifier,
+    isCompilerDiagnosticName,
     Measurement,
     Repository,
     Scenario,
@@ -30,13 +35,28 @@ import { getTempDirectories, HostContext, ProcessExitError, SystemInfo } from "@
 import { BenchmarkOptions, TSOptions } from "./";
 
 const diagnosticPattern = /^([a-z].+):\s+(.+?)[sk]?$/i;
+// Explicitly loose regex so --pretty will work.
+const errorPattern = /error.*TS\d+:/;
+
+function tryParseDiagnostic(line: string) {
+    if (errorPattern.test(line)) {
+        return { name: "Errors", value: 1, precision: 0 };
+    }
+    const m = diagnosticPattern.exec(line);
+    if (m) {
+        const name = m[1].trim();
+        const value = m[2].trim();
+        const precision = (value.split(".")[1] || "").length;
+        return { name, value: +value, precision };
+    }
+    return undefined;
+}
 
 export async function measureAndRunScenarios({ kind, options }: TSOptions, host: HostContext): Promise<Benchmark> {
     const date = (options.date ? new Date(options.date) : new Date()).toISOString();
     const system = SystemInfo.getCurrent();
     const repository = Repository.tryDiscover(
-        kind === "tsc" ? path.dirname(options.tsc)
-            : kind === "tsserver" ? path.dirname(options.tsserver) : options.builtDir,
+        options.builtDir,
         options.repositoryType,
         options.repositoryUrl,
         options.repositoryBranch,
@@ -44,7 +64,7 @@ export async function measureAndRunScenarios({ kind, options }: TSOptions, host:
         options.repositoryDate,
         options.repositoryCommitSubject,
     );
-    const scenarios = await Scenario.findScenarios(options.scenarioConfigDirs, options.scenarios, kind);
+    const scenarios = await Scenario.findScenarios(options.scenarios, { scenarioDir: options.scenarioDir, kind });
     if (scenarios.length === 0) {
         host.error(
             `abort: Could not find any scenario of kind '${kind}' ${
@@ -138,6 +158,10 @@ async function runCompilerScenario(
     hostSpecifier: HostSpecifier,
     hostIndex: number,
 ): Promise<Measurement> {
+    const tsc = path.join(options.builtDir, "tsc.js");
+    const typescript = path.join(options.builtDir, "typescript.js");
+    const tscPublicWrapper = path.join(__dirname, "tscpublic.js");
+    const usesPublicApi = !!scenario.tscConfig?.usePublicApi;
     const temp = await getTempDirectories();
     const expansion = ExpansionProvider.getProviders({ runner: { kind: "tsc", options }, temp, scenario, host });
     const { cmd, args, hasBuild } = new CommandLineArgumentsBuilder(
@@ -147,11 +171,12 @@ async function runCompilerScenario(
         options.cpus,
         options.predictable,
     )
-        .add(options.tsc)
+        .addIf(!usesPublicApi, tsc)
+        .addIf(usesPublicApi, tscPublicWrapper, typescript)
         .addCompilerOptions(options, scenario)
         .add("--diagnostics");
     const { cmd: clean, args: cleanargs } = new CommandLineArgumentsBuilder(expansion, host)
-        .add(options.tsc)
+        .add(tsc)
         .addCompilerOptions(options, scenario)
         .add("--clean");
     try {
@@ -162,9 +187,13 @@ async function runCompilerScenario(
     context.trace(`> ${cmd} ${args.join(" ")}`);
 
     const samples: CompilerSample[] = [];
+    const precisions: { [K in keyof CompilerSample]?: number; } = Object.create(null);
     const numIterations = options.iterations || 5;
-    for (let i = 0; i < numIterations; i++) {
-        const values: { [key: string]: number; } = Object.create(null);
+    const numWarmups = options.warmups || 0;
+    const runs = numIterations + numWarmups;
+    for (let i = 0; i < runs; i++) {
+        const isWarmup = i < numWarmups;
+        const values: CompilerSample = Object.create(null);
         if (hasBuild) {
             const cleanProcess = spawn(clean!, cleanargs);
             let cleanProcessOutput = "";
@@ -181,8 +210,12 @@ async function runCompilerScenario(
 
             readline.createInterface({ input: childProcess.stdout, terminal: false }).on("line", line => {
                 context.trace(`> ${line}`);
-                const m = diagnosticPattern.exec(line);
-                if (m) values[m[1].trim()] = (values[m[1].trim()] ?? 0) + +m[2].trim();
+                const m = tryParseDiagnostic(line);
+                if (m && isCompilerDiagnosticName(m.name)) {
+                    const sampleName = getCompilerSampleNameFromDiagnosticName(m.name);
+                    values[sampleName] = (values[sampleName] ?? 0) + m.value;
+                    precisions[sampleName] = Math.max(precisions[sampleName] ?? 0, m.precision);
+                }
             });
 
             readline.createInterface({ input: childProcess.stderr, terminal: false }).on("line", line => {
@@ -197,9 +230,9 @@ async function runCompilerScenario(
         }
 
         context.info(
-            `    ${formatProgress(i, numIterations)} Compiled scenario '${name}'${status ? " (with errors)" : ""} in ${
-                values["Total time"]
-            }s.`,
+            `    ${formatProgress(i, runs)} Compiled scenario '${name}'${
+                status ? " (with errors)" : ""
+            } in ${values.totalTime}s.${isWarmup ? " (warmup)" : ""}`,
         );
 
         try {
@@ -207,26 +240,20 @@ async function runCompilerScenario(
         }
         catch {}
 
-        if (values["Total time"]) {
-            samples.push({
-                project: name,
-                parseTime: +values["Parse time"],
-                bindTime: +values["Bind time"],
-                checkTime: +values["Check time"],
-                emitTime: +values["Emit time"],
-                totalTime: +values["Total time"],
-                memoryUsed: +values["Memory used"],
-            });
+        if (!isWarmup && values.totalTime) {
+            samples.push(values);
         }
     }
 
-    const metrics: Record<string, Value | undefined> = {};
-    addMetric(metrics, "parseTime", samples.map(x => x.parseTime), "Parse Time", "s", 2);
-    addMetric(metrics, "bindTime", samples.map(x => x.bindTime), "Bind Time", "s", 2);
-    addMetric(metrics, "checkTime", samples.map(x => x.checkTime), "Check Time", "s", 2);
-    addMetric(metrics, "emitTime", samples.map(x => x.emitTime), "Emit Time", "s", 2);
-    addMetric(metrics, "totalTime", samples.map(x => x.totalTime), "Total Time", "s", 2);
-    addMetric(metrics, "memoryUsed", samples.map(x => x.memoryUsed), "Memory used", "k", 0);
+    const metrics: Record<string, Value | undefined> = Object.create(null);
+    for (const sampleName of compilerSampleKeys) {
+        metrics[sampleName] = computeMetrics(
+            samples.map(x => x[sampleName] ?? 0),
+            getCompilerMetricName(sampleName),
+            getCompilerSampleKeyUnit(sampleName),
+            precisions[sampleName] ?? 0,
+        );
+    }
 
     return new Measurement(
         scenario.name,
@@ -247,13 +274,14 @@ async function runTSServerScenario(
     hostSpecifier: HostSpecifier,
     hostIndex: number,
 ): Promise<Measurement> {
+    const tsserver = path.join(options.builtDir, "tsserver.js");
     const temp = await getTempDirectories();
     const expansion = ExpansionProvider.getProviders({ runner: { kind: "tsserver", options }, temp, scenario, host });
     const argsBuilder = new CommandLineArgumentsBuilder(expansion, host, /*exposeGc*/ false)
         .add(path.join(__dirname, "measuretsserver.js"))
-        .add("--tsserver", options.tsserver)
+        .add("--tsserver", tsserver)
         .add("--commands", scenario.configFile)
-        .add("--suite", options.suite);
+        .add("--suite", options.suiteDir);
     if (options.extended) {
         argsBuilder.add("--extended");
     }
@@ -274,17 +302,21 @@ async function runTSServerScenario(
     const samples: TSServerSample[] = [];
     const valueKeys = new Set<string>();
     const numIterations = options.iterations || 5;
-    for (let i = 0; i < numIterations; i++) {
+    const numWarmups = options.warmups || 0;
+    const runs = numIterations + numWarmups;
+    for (let i = 0; i < runs; i++) {
+        const isWarmup = i < numWarmups;
+        const before = performance.now();
         const values: { [key: string]: number; } = Object.create(null);
         const runAndParseOutput = () => {
             const childProcess = spawn(cmd!, args);
 
             readline.createInterface({ input: childProcess.stdout, terminal: false }).on("line", line => {
                 context.trace(`> ${line}`);
-                const m = diagnosticPattern.exec(line);
+                const m = tryParseDiagnostic(line);
                 if (m) {
-                    values[m[1].trim()] = (values[m[1].trim()] ?? 0) + +m[2].trim();
-                    valueKeys.add(m[1].trim());
+                    values[m.name] = (values[m.name] ?? 0) + m.value;
+                    valueKeys.add(m.name);
                 }
             });
 
@@ -295,9 +327,12 @@ async function runTSServerScenario(
             return new Promise<number>(resolve => childProcess.once("exit", resolve));
         };
         const status = await runAndParseOutput();
+        const after = performance.now();
 
         context.info(
-            `    ${formatProgress(i, numIterations)} Ran scenario '${name}'${status ? " (with errors)" : ""}.`,
+            `    ${formatProgress(i, runs)} Ran scenario '${name}'${status ? " (with errors)" : ""} in ${
+                ((after - before) / 1000).toFixed(2)
+            }s.${isWarmup ? " (warmup)" : ""}`,
         );
 
         try {
@@ -305,14 +340,16 @@ async function runTSServerScenario(
         }
         catch {}
 
-        samples.push(values);
+        if (!isWarmup) {
+            samples.push(values);
+        }
     }
 
-    const metrics: { [key: string]: Value | undefined; } = Object.create(null);
-    valueKeys.forEach(metricName => {
+    const metrics: Record<string, Value | undefined> = Object.create(null);
+    for (const metricName of valueKeys) {
         const isCount = metricName.includes("count");
-        addMetric(metrics, metricName, samples.map(x => x[metricName]), metricName, isCount ? "" : "ms", 0);
-    });
+        metrics[metricName] = computeMetrics(samples.map(x => x[metricName] ?? 0), metricName, isCount ? "" : "ms", 0);
+    }
 
     return new Measurement(
         scenario.name,
@@ -367,7 +404,10 @@ async function runStartupScenario(
 
     const samples: StartupSample[] = [];
     const numIterations = options.iterations || 5;
-    for (let i = 0; i < numIterations; i++) {
+    const numWarmups = options.warmups || 0;
+    const runs = numIterations + numWarmups;
+    for (let i = 0; i < runs; i++) {
+        const isWarmup = i < numWarmups;
         let exitCode: number | undefined;
 
         const beforeAll = performance.now();
@@ -376,21 +416,23 @@ async function runStartupScenario(
             exitCode ??= await execute();
             const after = performance.now();
 
-            samples.push({
-                executionTime: after - before,
-            });
+            if (!isWarmup) {
+                samples.push({
+                    executionTime: after - before,
+                });
+            }
         }
         const afterAll = performance.now();
 
         context.info(
-            `    ${formatProgress(i, numIterations)} Completed ${scale} iterations${
-                exitCode ? " (with errors)" : ""
-            } in ${((afterAll - beforeAll) / 1000).toFixed(2)}s.`,
+            `    ${formatProgress(i, runs)} Completed ${scale} iterations${exitCode ? " (with errors)" : ""} in ${
+                ((afterAll - beforeAll) / 1000).toFixed(2)
+            }s.${isWarmup ? ` (warmup)` : ""}`,
         );
     }
 
-    const metrics: Record<string, Value | undefined> = {};
-    addMetric(metrics, "executionTime", samples.map(x => x.executionTime), "Execution time", "ms", 2);
+    const metrics: Record<string, Value | undefined> = Object.create(null);
+    metrics.executionTime = computeMetrics(samples.map(x => x.executionTime ?? 0), "Execution time", "ms", 2);
 
     return new Measurement(
         scenario.name,
@@ -399,18 +441,4 @@ async function runStartupScenario(
         hostIndex,
         metrics,
     );
-}
-
-/**
- * Adds a metric to a metrics bag.
- */
-function addMetric(
-    metrics: Record<string, Value | undefined>,
-    propName: string,
-    samples: number[],
-    metric: string,
-    unit: string,
-    precision: number,
-) {
-    metrics[propName] = computeMetrics(samples, metric, unit, precision);
 }

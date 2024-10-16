@@ -1,11 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { Command, CommandMap, Scenario } from "@ts-perf/api";
-import { HostContext } from "@ts-perf/core";
+import { Command, CommandMap, CommonOptions, Scenario } from "@ts-perf/api";
+import { HostContext, localScenariosDirectory } from "@ts-perf/core";
 
-export interface AddScenarioOptions {
-    scenarioConfigDir?: string[];
+export interface AddScenarioOptions extends CommonOptions {
     name: string;
     args?: string[];
     platforms?: string[];
@@ -14,18 +13,15 @@ export interface AddScenarioOptions {
 }
 
 export async function addScenario(options: AddScenarioOptions, context: HostContext) {
-    const scenarioConfigDirs = Scenario.getScenarioConfigDirs(options.scenarioConfigDir);
-    const scenarioConfigDir = scenarioConfigDirs[0];
-    if (scenarioConfigDirs.length > 1) {
-        context.warn(`Multiple scenario config directories found. Using '${scenarioConfigDir}'.`);
+    const scenarioDir = path.resolve(
+        options.scenarioDir ? options.scenarioDir : localScenariosDirectory,
+        path.basename(options.name),
+    );
+    if (!fs.existsSync(scenarioDir)) {
+        await fs.promises.mkdir(scenarioDir, { recursive: true });
     }
 
-    const configDir = path.resolve(scenarioConfigDir, path.basename(options.name));
-    if (!fs.existsSync(configDir)) {
-        await fs.promises.mkdir(configDir, { recursive: true });
-    }
-
-    const configFile = path.resolve(configDir, "scenario.json");
+    const configFile = path.resolve(scenarioDir, "scenario.json");
     const scenario = Scenario.create({ ...options, kind: "tsc", configFile });
     await scenario.saveAsync(configFile);
 
@@ -36,6 +32,7 @@ const command: Command<AddScenarioOptions> = {
     commandName: "add",
     summary: "Add a local compiler scenario.",
     description: "Add a local compiler scenario.",
+    include: ["common"],
     options: {
         name: {
             type: "string",
@@ -46,15 +43,6 @@ const command: Command<AddScenarioOptions> = {
             defaultValue: () => [],
             param: "name",
             description: "",
-        },
-        scenarioConfigDirs: {
-            type: "string",
-            longName: "scenarioConfigDir",
-            alias: "scenarioConfigDirs",
-            defaultValue: () => [],
-            param: "directory",
-            multiple: true,
-            description: "Paths to directories containing scenario JSON files.",
         },
         args: {
             type: "string",

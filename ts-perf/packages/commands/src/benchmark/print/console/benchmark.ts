@@ -20,18 +20,19 @@ export function printBenchmark(benchmark: Benchmark, options: BenchmarkOptions, 
         columns: [
             { header: "Project", key: "metric", expression: x => x.metric },
             { header: "Average", expression: x => formatMean(x), align: "right" },
-            { header: "Best", expression: x => formatUnit(x.minimum, x), align: "right" },
-            { header: "Worst", expression: x => formatUnit(x.maximum, x), align: "right" },
+            { header: "Best", expression: x => x.allSamplesEqual ? "~" : formatUnit(x.minimum, x), align: "right" },
+            { header: "Worst", expression: x => x.allSamplesEqual ? "~" : formatUnit(x.maximum, x), align: "right" },
         ],
         rowStyles: [
             "*",
             { className: "group header", border: Border.single.updateFrom({ top: "double" }) },
+            { className: "body", match: (x: MeasurementPivot) => x.metric === "Parse Time", border: { top: "single" } },
+            { className: "body", match: (x: MeasurementPivot) => x.metric === "Total Time", border: { top: "single" } },
             {
                 className: "body",
-                match: (x: MeasurementPivot) => x.metric === "Memory used",
+                match: (x: MeasurementPivot) => x.metric === "Errors",
                 foregroundColor: "dark-gray",
             },
-            { className: "body", match: (x: MeasurementPivot) => x.metric === "Total Time", border: { top: "single" } },
         ],
     });
 

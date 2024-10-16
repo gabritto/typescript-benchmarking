@@ -5,6 +5,7 @@ import {
     Benchmark,
     Command,
     CommandMap,
+    CommonOptions,
     CompilerOptions,
     formatPercent,
     MeasurementComparison,
@@ -20,9 +21,8 @@ import * as startup from "./startup";
 import * as tsc from "./tsc";
 import * as tsserver from "./tsserver";
 
-export interface BenchmarkOptions extends AzureStorageOptions {
+export interface BenchmarkOptions extends AzureStorageOptions, CommonOptions {
     hosts?: string[];
-    scenarioConfigDirs?: string[];
     scenarios?: string[];
     load?: string;
     save?: string[];
@@ -33,6 +33,7 @@ export interface BenchmarkOptions extends AzureStorageOptions {
     midline?: string;
     midlineName?: string;
     benchmarkName?: string;
+    warmups?: number;
     iterations?: number;
     color?: boolean;
     date?: string;
@@ -63,6 +64,9 @@ export async function benchmark(tsoptions: TSOptions, host: HostContext) {
     const { options } = tsoptions;
     if (options.iterations === undefined) {
         options.iterations = 5;
+    }
+    if (options.warmups === undefined) {
+        options.warmups = 0;
     }
 
     if (options.baseline || options.midline) {
@@ -153,7 +157,7 @@ const command: Command<BenchmarkOptions> = {
     commandName: "benchmark",
     summary: "Load or run a benchmark.",
     description: "Load or run a benchmark and compare it to an optional baseline.",
-    include: ["reporting", "azureStorage"],
+    include: ["reporting", "azureStorage", "common"],
     options: {
         out: {
             type: "string",
@@ -181,6 +185,12 @@ const command: Command<BenchmarkOptions> = {
             alias: ["iter", "iteration"],
             param: "count",
             description: "Runs the benchmark for <count> iterations (default '5').",
+            validate: validateIterations,
+        },
+        warmups: {
+            type: "number",
+            param: "count",
+            description: "Runs the benchmark for <count> warmups (default '0').",
             validate: validateIterations,
         },
         save: {
@@ -222,15 +232,6 @@ const command: Command<BenchmarkOptions> = {
             param: "host",
             description:
                 "Uses the specified <host>. A host has one of the following forms:\n- A known host, restricted by version and processor architecture:\n  <name>[,version=v<version>][,arch=<arch>]\n- A path to an executable:\n  <file>",
-        },
-        scenarioConfigDirs: {
-            type: "string",
-            longName: "scenarioConfigDir",
-            alias: "scenarioConfigDirs",
-            defaultValue: () => [],
-            param: "directory",
-            multiple: true,
-            description: "Paths to directories containing scenario JSON files.",
         },
         scenarios: {
             type: "string",
